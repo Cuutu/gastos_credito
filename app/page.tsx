@@ -164,6 +164,15 @@ function DashboardContent() {
         onOpenChange={setFormOpen}
         persons={persons}
         expense={editExpense}
+        onSuccess={(firstDueMonth) => {
+          if (firstDueMonth) {
+            setMonth(firstDueMonth)
+            const params = new URLSearchParams(searchParams.toString())
+            params.set("month", firstDueMonth)
+            router.replace(`/?${params.toString()}`, { scroll: false })
+          }
+          handleMutate()
+        }}
       />
 
       <ExpenseDetail

@@ -79,7 +79,14 @@ export async function createExpense(formData: ExpenseInput) {
     return { success: true, id: expenseId }
   } catch (e) {
     console.error("Error creating expense:", e)
-    return { error: "Error al crear el gasto" }
+    const msg = e instanceof Error ? e.message : "Error desconocido"
+    if (msg.includes("DATABASE_URL")) {
+      return { error: "Base de datos no configurada. Agregá DATABASE_URL en .env.local" }
+    }
+    if (msg.includes("relation") || msg.includes("does not exist")) {
+      return { error: "Las tablas no existen. Ejecutá el script 001-create-tables.sql en Neon" }
+    }
+    return { error: `Error al crear el gasto: ${msg}` }
   }
 }
 

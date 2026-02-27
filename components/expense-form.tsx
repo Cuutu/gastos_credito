@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useEffect } from "react"
 import { format } from "date-fns"
+import { addMonths } from "@/lib/format"
 import { es } from "date-fns/locale"
 import { CalendarIcon, Minus, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -38,6 +39,7 @@ interface ExpenseFormProps {
   onOpenChange: (open: boolean) => void
   persons: Person[]
   expense?: ExpenseWithPerson | null
+  onSuccess?: (firstDueMonth?: string) => void
 }
 
 export function ExpenseForm({
@@ -45,6 +47,7 @@ export function ExpenseForm({
   onOpenChange,
   persons,
   expense,
+  onSuccess,
 }: ExpenseFormProps) {
   const [isPending, startTransition] = useTransition()
   const isEditing = !!expense
@@ -155,6 +158,12 @@ export function ExpenseForm({
         toast.error(result.error)
       } else {
         toast.success(isEditing ? "Gasto actualizado" : "Gasto creado")
+        const purchaseMonth = format(purchaseDate!, "yyyy-MM")
+        const firstMonth =
+          firstInstallment === 1
+            ? purchaseMonth
+            : addMonths(purchaseMonth, firstInstallment - 1)
+        onSuccess?.(firstMonth)
         onOpenChange(false)
       }
     })
@@ -359,6 +368,12 @@ export function ExpenseForm({
           {/* Persona */}
           <div className="flex flex-col gap-1.5">
             <Label>Persona</Label>
+            {persons.length === 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-500">
+                No hay personas. Creá al menos una en la pestaña Personas, o
+                ejecutá el script SQL para cargar las por defecto.
+              </p>
+            )}
             <Select
               value={personId}
               onValueChange={(v) => {

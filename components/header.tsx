@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { CreditCard, Users, LayoutDashboard, Moon, Sun } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { CreditCard, Users, LayoutDashboard, Moon, Sun, LogOut } from "lucide-react"
 import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -14,7 +14,14 @@ const navItems = [
 
 export function Header() {
   const pathname = usePathname()
+  const router = useRouter()
   const { theme, setTheme } = useTheme()
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" })
+    router.push("/login")
+    router.refresh()
+  }
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -45,6 +52,15 @@ export function Header() {
           </nav>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            onClick={handleLogout}
+            aria-label="Cerrar sesión"
+          >
+            <LogOut className="size-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
