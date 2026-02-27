@@ -18,7 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatARS, formatDate, formatMonth } from "@/lib/format"
-import type { ExpenseWithPerson, ExpenseInstallment } from "@/lib/types"
+import type { ExpenseWithPerson } from "@/lib/types"
 
 interface ExpenseDetailProps {
   open: boolean
@@ -32,7 +32,9 @@ export function ExpenseDetail({
   expenseId,
 }: ExpenseDetailProps) {
   const [expense, setExpense] = useState<ExpenseWithPerson | null>(null)
-  const [installments, setInstallments] = useState<ExpenseInstallment[]>([])
+  const [installments, setInstallments] = useState<
+    { installment_number: number; due_month: string; amount: number }[]
+  >([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -42,7 +44,21 @@ export function ExpenseDetail({
         .then((r) => r.json())
         .then((data) => {
           setExpense(data.expense)
-          setInstallments(data.installments)
+          // Agrupar por cuota (gastos compartidos tienen varias filas por cuota)
+          const byInst = new Map<string, { installment_number: number; due_month: string; amount: number }>()
+          for (const i of data.installments || []) {
+            const key = `${i.installment_number}-${i.due_month}`
+            const prev = byInst.get(key)
+            const amt = parseFloat(i.amount)
+            byInst.set(key, {
+              installment_number: i.installment_number,
+              due_month: i.due_month,
+              amount: prev ? prev.amount + amt : amt,
+            })
+          }
+          setInstallments(
+            Array.from(byInst.values()).sort((a, b) => a.installment_number - b.installment_number)
+          )
         })
         .finally(() => setLoading(false))
     } else {
@@ -73,8 +89,26 @@ export function ExpenseDetail({
                 <p className="font-medium">{expense.merchant}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Persona</p>
-                <Badge variant="secondary">{expense.person_name}</Badge>
+                <p className="text-xs text-muted-foreground">
+                  {(expense as ExpenseWithPerson & { person_ids?: number[]; person_names?: string[] })
+                    .person_ids?.length > 1
+                    ? "Personas (compartido)"
+                    : "Persona"}
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {(
+                    expense as ExpenseWithPerson & {
+                      person_ids?: number[]
+                      person_names?: string[]
+                    }
+                  ).person_names?.map((name, i) => (
+                    <Badge key={i} variant="secondary">
+                      {name}
+                    </Badge>
+                  )) ?? (
+                    <Badge variant="secondary">{expense.person_name}</Badge>
+                  )}
+                </div>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Monto total</p>
@@ -127,7 +161,7 @@ export function ExpenseDetail({
                             {formatMonth(inst.due_month)}
                           </TableCell>
                           <TableCell className="text-right font-medium tabular-nums">
-                            {formatARS(inst.amount)}
+                            {formatARS(inst.amount.toString())}
                           </TableCell>
                         </TableRow>
                       ))}

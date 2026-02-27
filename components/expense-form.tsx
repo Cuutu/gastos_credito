@@ -15,13 +15,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Popover,
   PopoverContent,
@@ -56,7 +50,7 @@ export function ExpenseForm({
   const [amountPerInstallment, setAmountPerInstallment] = useState("")
   const [installments, setInstallments] = useState(1)
   const [firstInstallment, setFirstInstallment] = useState(1)
-  const [personId, setPersonId] = useState("")
+  const [personIds, setPersonIds] = useState<number[]>([])
   const [purchaseDate, setPurchaseDate] = useState<Date | undefined>(undefined)
   const [purchaseDateStr, setPurchaseDateStr] = useState("")
   const [card, setCard] = useState("")
@@ -91,7 +85,9 @@ export function ExpenseForm({
           (expense as ExpenseWithPerson & { first_installment?: number })
             .first_installment ?? 1
         )
-        setPersonId(expense.person_id.toString())
+        const ids = (expense as ExpenseWithPerson & { person_ids?: number[] })
+          .person_ids ?? [expense.person_id]
+        setPersonIds(ids)
         const expDate = new Date(expense.purchase_date + "T00:00:00")
         setPurchaseDate(expDate)
         setPurchaseDateStr(format(expDate, "dd/MM/yyyy"))
@@ -104,7 +100,7 @@ export function ExpenseForm({
         setAmountPerInstallment("")
         setInstallments(1)
         setFirstInstallment(1)
-        setPersonId("")
+        setPersonIds([])
         const today = new Date()
         setPurchaseDate(today)
         setPurchaseDateStr(format(today, "dd/MM/yyyy"))
@@ -119,7 +115,7 @@ export function ExpenseForm({
   function handleSubmit() {
     const newErrors: Record<string, string> = {}
     if (!merchant.trim()) newErrors.merchant = "Obligatorio"
-    if (!personId) newErrors.personId = "Seleccione persona"
+    if (!personIds.length) newErrors.personIds = "Seleccioná al menos una persona"
 
     // Parsear fecha: yyyy-MM-dd o dd/MM/yyyy
     let dateToUse: Date | null = purchaseDate ?? null
@@ -161,7 +157,7 @@ export function ExpenseForm({
         : { amount_per_installment: perInst }),
       installments,
       first_installment: firstInstallment,
-      person_id: parseInt(personId),
+      person_ids: personIds,
       purchase_date: format(resolvedDate, "yyyy-MM-dd"),
       card: card.trim() || null,
       notes: notes.trim() || null,
@@ -396,38 +392,51 @@ export function ExpenseForm({
             </div>
           )}
 
-          {/* Persona */}
+          {/* Personas — puede ser compartido entre varias */}
           <div className="flex flex-col gap-1.5">
-            <Label>Persona</Label>
+            <Label>Personas — si compartís, se divide el monto por igual</Label>
             {persons.length === 0 && (
               <p className="text-xs text-amber-600 dark:text-amber-500">
                 No hay personas. Creá al menos una en la pestaña Personas, o
                 ejecutá el script SQL para cargar las por defecto.
               </p>
             )}
-            <Select
-              value={personId}
-              onValueChange={(v) => {
-                setPersonId(v)
-                setErrors((p) => ({ ...p, personId: "" }))
-              }}
-            >
-              <SelectTrigger
-                className="w-full"
-                aria-invalid={!!errors.personId}
-              >
-                <SelectValue placeholder="Seleccionar persona" />
-              </SelectTrigger>
-              <SelectContent>
-                {persons.map((p) => (
-                  <SelectItem key={p.id} value={p.id.toString()}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.personId && (
-              <p className="text-xs text-destructive">{errors.personId}</p>
+            <div className="flex flex-wrap gap-3 rounded-lg border p-3">
+              {persons.map((p) => (
+                <label
+                  key={p.id}
+                  className="flex cursor-pointer items-center gap-2"
+                >
+                  <Checkbox
+                    checked={personIds.includes(p.id)}
+                    onCheckedChange={(checked) => {
+                      setPersonIds((prev) =>
+                        checked
+                          ? [...prev, p.id]
+                          : prev.filter((id) => id !== p.id)
+                      )
+                      setErrors((e) => ({ ...e, personIds: "" }))
+                    }}
+                  />
+                  <span className="text-sm font-medium">{p.name}</span>
+                </label>
+              ))}
+            </div>
+            {personIds.length > 1 && (
+              <p className="text-xs text-muted-foreground">
+                Gasto compartido: cada uno paga $
+                {amountTotal && installments > 0
+                  ? (
+                      parseFloat(amountTotal) /
+                      installments /
+                      personIds.length
+                    ).toFixed(2)
+                  : "—"}{" "}
+                por cuota
+              </p>
+            )}
+            {errors.personIds && (
+              <p className="text-xs text-destructive">{errors.personIds}</p>
             )}
           </div>
 

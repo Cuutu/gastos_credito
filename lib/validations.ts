@@ -36,7 +36,12 @@ export const expenseSchema = z
     person_id: z
       .number({ invalid_type_error: "Seleccione una persona" })
       .int()
-      .positive("Seleccione una persona"),
+      .positive("Seleccione una persona")
+      .optional(),
+    person_ids: z
+      .array(z.number().int().positive())
+      .min(1, "Seleccioná al menos una persona")
+      .optional(),
     purchase_date: z.string().min(1, "La fecha es obligatoria"),
     card: z.string().max(100).optional().nullable(),
     notes: z.string().max(500).optional().nullable(),
@@ -58,16 +63,30 @@ export const expenseSchema = z
       path: ["first_installment"],
     }
   )
+  .refine(
+    (data) =>
+      (data.person_id != null && data.person_id > 0) ||
+      (data.person_ids != null && data.person_ids.length > 0),
+    { message: "Seleccioná al menos una persona", path: ["person_id"] }
+  )
   .transform((data) => {
     const amount_total =
       data.amount_total ??
       (data.amount_per_installment != null
         ? Math.round(data.amount_per_installment * data.installments * 100) / 100
         : 0)
+    const person_ids =
+      data.person_ids && data.person_ids.length > 0
+        ? data.person_ids
+        : data.person_id
+          ? [data.person_id]
+          : []
     return {
       ...data,
       amount_total,
       first_installment: data.first_installment ?? 1,
+      person_ids,
+      person_id: person_ids[0] ?? data.person_id,
     }
   })
 

@@ -37,9 +37,10 @@ Tu proyecto ya usa **Neon** (PostgreSQL serverless). Seguí estos pasos para cre
 ## 5. Crear las tablas
 
 1. En el dashboard de Neon, andá a **"SQL Editor"** (menú lateral)
-2. Abrí el archivo `scripts/001-create-tables.sql` de este proyecto
-3. Copiá todo el contenido y pegálo en el SQL Editor
-4. Hacé clic en **"Run"**
+2. Ejecutá en orden:
+   - `scripts/001-create-tables.sql` — tablas base
+   - `scripts/002-shared-expenses.sql` — soporte para gastos compartidos
+3. Copiá el contenido de cada archivo y pegálo en el SQL Editor, luego **"Run"**
 
 ¡Listo! Ya podés ejecutar `npm run dev` y probar la app.
 

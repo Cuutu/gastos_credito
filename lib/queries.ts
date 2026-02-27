@@ -29,14 +29,14 @@ export async function getInstallmentsByMonth(
     const rows = await sql`
       SELECT 
         ei.id, ei.expense_id, ei.installment_number, ei.due_month, ei.amount, ei.created_at,
-        e.merchant, e.person_id, e.installments as total_installments, e.amount_total, e.purchase_date,
+        e.merchant, COALESCE(ei.person_id, e.person_id) as person_id, e.installments as total_installments, e.amount_total, e.purchase_date,
         p.name as person_name
       FROM expense_installments ei
       JOIN expenses e ON ei.expense_id = e.id
-      JOIN persons p ON e.person_id = p.id
+      JOIN persons p ON COALESCE(ei.person_id, e.person_id) = p.id
       WHERE ei.due_month = ${month}
         AND e.deleted_at IS NULL
-        AND e.person_id = ${personId}
+        AND COALESCE(ei.person_id, e.person_id) = ${personId}
         AND LOWER(e.merchant) LIKE LOWER(${"%" + search + "%"})
       ORDER BY e.purchase_date DESC, e.merchant ASC
     `
@@ -47,14 +47,14 @@ export async function getInstallmentsByMonth(
     const rows = await sql`
       SELECT 
         ei.id, ei.expense_id, ei.installment_number, ei.due_month, ei.amount, ei.created_at,
-        e.merchant, e.person_id, e.installments as total_installments, e.amount_total, e.purchase_date,
+        e.merchant, COALESCE(ei.person_id, e.person_id) as person_id, e.installments as total_installments, e.amount_total, e.purchase_date,
         p.name as person_name
       FROM expense_installments ei
       JOIN expenses e ON ei.expense_id = e.id
-      JOIN persons p ON e.person_id = p.id
+      JOIN persons p ON COALESCE(ei.person_id, e.person_id) = p.id
       WHERE ei.due_month = ${month}
         AND e.deleted_at IS NULL
-        AND e.person_id = ${personId}
+        AND COALESCE(ei.person_id, e.person_id) = ${personId}
       ORDER BY e.purchase_date DESC, e.merchant ASC
     `
     return rows as InstallmentWithExpense[]
@@ -64,11 +64,11 @@ export async function getInstallmentsByMonth(
     const rows = await sql`
       SELECT 
         ei.id, ei.expense_id, ei.installment_number, ei.due_month, ei.amount, ei.created_at,
-        e.merchant, e.person_id, e.installments as total_installments, e.amount_total, e.purchase_date,
+        e.merchant, COALESCE(ei.person_id, e.person_id) as person_id, e.installments as total_installments, e.amount_total, e.purchase_date,
         p.name as person_name
       FROM expense_installments ei
       JOIN expenses e ON ei.expense_id = e.id
-      JOIN persons p ON e.person_id = p.id
+      JOIN persons p ON COALESCE(ei.person_id, e.person_id) = p.id
       WHERE ei.due_month = ${month}
         AND e.deleted_at IS NULL
         AND LOWER(e.merchant) LIKE LOWER(${"%" + search + "%"})
@@ -80,11 +80,11 @@ export async function getInstallmentsByMonth(
   const rows = await sql`
     SELECT 
       ei.id, ei.expense_id, ei.installment_number, ei.due_month, ei.amount, ei.created_at,
-      e.merchant, e.person_id, e.installments as total_installments, e.amount_total, e.purchase_date,
+      e.merchant, COALESCE(ei.person_id, e.person_id) as person_id, e.installments as total_installments, e.amount_total, e.purchase_date,
       p.name as person_name
     FROM expense_installments ei
     JOIN expenses e ON ei.expense_id = e.id
-    JOIN persons p ON e.person_id = p.id
+    JOIN persons p ON COALESCE(ei.person_id, e.person_id) = p.id
     WHERE ei.due_month = ${month}
       AND e.deleted_at IS NULL
     ORDER BY e.purchase_date DESC, e.merchant ASC
@@ -122,7 +122,7 @@ export async function getTotalsByPerson(
     SELECT p.id as person_id, p.name as person_name, COALESCE(SUM(ei.amount), 0) as total
     FROM expense_installments ei
     JOIN expenses e ON ei.expense_id = e.id
-    JOIN persons p ON e.person_id = p.id
+    JOIN persons p ON COALESCE(ei.person_id, e.person_id) = p.id
     WHERE ei.due_month = ${month} AND e.deleted_at IS NULL
     GROUP BY p.id, p.name
     ORDER BY total DESC
@@ -136,7 +136,7 @@ export async function getTotalsByPerson(
 
 export async function getExpenseById(
   id: number
-): Promise<ExpenseWithPerson | null> {
+): Promise<(ExpenseWithPerson & { person_ids?: number[] }) | null> {
   const sql = getDb()
   const rows = await sql`
     SELECT e.*, p.name as person_name
@@ -144,7 +144,28 @@ export async function getExpenseById(
     JOIN persons p ON e.person_id = p.id
     WHERE e.id = ${id} AND e.deleted_at IS NULL
   `
-  return (rows[0] as ExpenseWithPerson) || null
+  const expense = (rows[0] as ExpenseWithPerson) || null
+  if (!expense) return null
+
+  const shared = await sql`
+    SELECT ep.person_id, p.name as person_name
+    FROM expense_persons ep
+    JOIN persons p ON ep.person_id = p.id
+    WHERE ep.expense_id = ${id}
+    ORDER BY ep.person_id
+  `
+  if (shared.length > 0) {
+    return {
+      ...expense,
+      person_ids: shared.map((r) => r.person_id as number),
+      person_names: shared.map((r) => r.person_name as string),
+    }
+  }
+  return {
+    ...expense,
+    person_ids: [expense.person_id],
+    person_names: [expense.person_name],
+  }
 }
 
 export async function getExpenseInstallments(

@@ -51,13 +51,26 @@ export async function createExpense(formData: ExpenseInput) {
   const sql = getDb()
 
   try {
-    // Insert expense
+    const personIds = data.person_ids ?? [data.person_id]
+    const share = 1 / personIds.length
+
+    // Insert expense (person_id = primera persona para compatibilidad)
     const rows = await sql`
       INSERT INTO expenses (merchant, amount_total, installments, person_id, purchase_date, card, notes)
-      VALUES (${data.merchant}, ${data.amount_total}, ${data.installments}, ${data.person_id}, ${data.purchase_date}, ${data.card || null}, ${data.notes || null})
+      VALUES (${data.merchant}, ${data.amount_total}, ${data.installments}, ${personIds[0]}, ${data.purchase_date}, ${data.card || null}, ${data.notes || null})
       RETURNING id
     `
     const expenseId = rows[0].id as number
+
+    // Gastos compartidos: registrar cada persona con su parte
+    if (personIds.length > 1) {
+      for (const pid of personIds) {
+        await sql`
+          INSERT INTO expense_persons (expense_id, person_id, share)
+          VALUES (${expenseId}, ${pid}, ${share})
+        `
+      }
+    }
 
     // Generate installments
     const installments = computeInstallments(
@@ -68,10 +81,21 @@ export async function createExpense(formData: ExpenseInput) {
     )
 
     for (const inst of installments) {
-      await sql`
-        INSERT INTO expense_installments (expense_id, installment_number, due_month, amount)
-        VALUES (${expenseId}, ${inst.installmentNumber}, ${inst.dueMonth}, ${inst.amount})
-      `
+      if (personIds.length > 1) {
+        const amountPerPerson = inst.amount * share
+        const rounded = Math.round(amountPerPerson * 100) / 100
+        for (const pid of personIds) {
+          await sql`
+            INSERT INTO expense_installments (expense_id, installment_number, due_month, amount, person_id)
+            VALUES (${expenseId}, ${inst.installmentNumber}, ${inst.dueMonth}, ${rounded}, ${pid})
+          `
+        }
+      } else {
+        await sql`
+          INSERT INTO expense_installments (expense_id, installment_number, due_month, amount, person_id)
+          VALUES (${expenseId}, ${inst.installmentNumber}, ${inst.dueMonth}, ${inst.amount}, ${personIds[0]})
+        `
+      }
     }
 
     revalidatePath("/")
@@ -102,19 +126,33 @@ export async function updateExpense(id: number, formData: ExpenseInput) {
   const sql = getDb()
 
   try {
+    const personIds = data.person_ids ?? [data.person_id]
+    const share = 1 / personIds.length
+
     // Update expense
     await sql`
       UPDATE expenses 
       SET merchant = ${data.merchant}, 
           amount_total = ${data.amount_total}, 
           installments = ${data.installments}, 
-          person_id = ${data.person_id}, 
+          person_id = ${personIds[0]}, 
           purchase_date = ${data.purchase_date}, 
           card = ${data.card || null}, 
           notes = ${data.notes || null},
           updated_at = NOW()
       WHERE id = ${id}
     `
+
+    // Actualizar expense_persons (borrar y recrear)
+    await sql`DELETE FROM expense_persons WHERE expense_id = ${id}`
+    if (personIds.length > 1) {
+      for (const pid of personIds) {
+        await sql`
+          INSERT INTO expense_persons (expense_id, person_id, share)
+          VALUES (${id}, ${pid}, ${share})
+        `
+      }
+    }
 
     // Regenerate installments
     await sql`DELETE FROM expense_installments WHERE expense_id = ${id}`
@@ -127,10 +165,21 @@ export async function updateExpense(id: number, formData: ExpenseInput) {
     )
 
     for (const inst of installments) {
-      await sql`
-        INSERT INTO expense_installments (expense_id, installment_number, due_month, amount)
-        VALUES (${id}, ${inst.installmentNumber}, ${inst.dueMonth}, ${inst.amount})
-      `
+      if (personIds.length > 1) {
+        const amountPerPerson = inst.amount * share
+        const rounded = Math.round(amountPerPerson * 100) / 100
+        for (const pid of personIds) {
+          await sql`
+            INSERT INTO expense_installments (expense_id, installment_number, due_month, amount, person_id)
+            VALUES (${id}, ${inst.installmentNumber}, ${inst.dueMonth}, ${rounded}, ${pid})
+          `
+        }
+      } else {
+        await sql`
+          INSERT INTO expense_installments (expense_id, installment_number, due_month, amount, person_id)
+          VALUES (${id}, ${inst.installmentNumber}, ${inst.dueMonth}, ${inst.amount}, ${personIds[0]})
+        `
+      }
     }
 
     revalidatePath("/")
