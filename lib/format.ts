@@ -11,13 +11,20 @@ export function formatARS(amount: number | string): string {
 }
 
 export function formatMonth(yyyyMm: string): string {
+  if (!yyyyMm || typeof yyyyMm !== "string") return "—"
   const [year, month] = yyyyMm.split("-")
-  const date = new Date(parseInt(year), parseInt(month) - 1)
+  const y = parseInt(year, 10)
+  const m = parseInt(month, 10)
+  if (isNaN(y) || isNaN(m)) return yyyyMm
+  const date = new Date(y, m - 1)
+  if (isNaN(date.getTime())) return yyyyMm
   return date.toLocaleDateString("es-AR", { month: "long", year: "numeric" })
 }
 
 export function formatDate(dateStr: string): string {
-  const date = new Date(dateStr + "T00:00:00")
+  if (!dateStr || typeof dateStr !== "string") return "—"
+  const date = new Date(dateStr + "T12:00:00")
+  if (isNaN(date.getTime())) return dateStr
   return date.toLocaleDateString("es-AR", {
     day: "2-digit",
     month: "2-digit",

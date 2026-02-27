@@ -88,9 +88,13 @@ export function ExpenseForm({
         const ids = (expense as ExpenseWithPerson & { person_ids?: number[] })
           .person_ids ?? [expense.person_id]
         setPersonIds(ids)
-        const expDate = new Date(expense.purchase_date + "T00:00:00")
-        setPurchaseDate(expDate)
-        setPurchaseDateStr(format(expDate, "dd/MM/yyyy"))
+        const expDate = expense.purchase_date
+          ? new Date(expense.purchase_date + "T12:00:00")
+          : new Date()
+        const validDate =
+          !isNaN(expDate.getTime()) ? expDate : new Date()
+        setPurchaseDate(validDate)
+        setPurchaseDateStr(format(validDate, "dd/MM/yyyy"))
         setCard(expense.card || "")
         setNotes(expense.notes || "")
         setAmountMode("total")

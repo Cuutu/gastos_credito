@@ -33,8 +33,13 @@ function DashboardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const monthParam = searchParams.get("month") || getCurrentMonth()
+  const rawMonth = searchParams.get("month") || getCurrentMonth()
+  const monthParam = /^\d{4}-\d{2}$/.test(rawMonth) ? rawMonth : getCurrentMonth()
   const [month, setMonth] = useState(monthParam)
+
+  useEffect(() => {
+    setMonth((m) => (monthParam !== m ? monthParam : m))
+  }, [monthParam])
   const [personFilter, setPersonFilter] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")

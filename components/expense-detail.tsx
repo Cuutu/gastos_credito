@@ -153,7 +153,9 @@ export function ExpenseDetail({
                     </TableHeader>
                     <TableBody>
                       {installments.map((inst) => (
-                        <TableRow key={inst.id}>
+                        <TableRow
+                          key={`${inst.installment_number}-${inst.due_month}`}
+                        >
                           <TableCell className="tabular-nums">
                             {inst.installment_number}
                           </TableCell>
