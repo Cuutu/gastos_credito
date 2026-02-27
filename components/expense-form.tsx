@@ -3,7 +3,6 @@
 import { useState, useTransition, useEffect } from "react"
 import { format } from "date-fns"
 import { addMonths } from "@/lib/format"
-import { es } from "date-fns/locale"
 import { CalendarIcon, Minus, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,7 +28,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { cn } from "@/lib/utils"
 import { createExpense, updateExpense } from "@/lib/actions/expenses"
 import type { Person, ExpenseWithPerson } from "@/lib/types"
 import { toast } from "sonner"
@@ -60,6 +58,7 @@ export function ExpenseForm({
   const [firstInstallment, setFirstInstallment] = useState(1)
   const [personId, setPersonId] = useState("")
   const [purchaseDate, setPurchaseDate] = useState<Date | undefined>(undefined)
+  const [purchaseDateStr, setPurchaseDateStr] = useState("")
   const [card, setCard] = useState("")
   const [notes, setNotes] = useState("")
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -93,7 +92,9 @@ export function ExpenseForm({
             .first_installment ?? 1
         )
         setPersonId(expense.person_id.toString())
-        setPurchaseDate(new Date(expense.purchase_date + "T00:00:00"))
+        const expDate = new Date(expense.purchase_date + "T00:00:00")
+        setPurchaseDate(expDate)
+        setPurchaseDateStr(format(expDate, "dd/MM/yyyy"))
         setCard(expense.card || "")
         setNotes(expense.notes || "")
         setAmountMode("total")
@@ -104,7 +105,9 @@ export function ExpenseForm({
         setInstallments(1)
         setFirstInstallment(1)
         setPersonId("")
-        setPurchaseDate(new Date())
+        const today = new Date()
+        setPurchaseDate(today)
+        setPurchaseDateStr(format(today, "dd/MM/yyyy"))
         setCard("")
         setNotes("")
         setAmountMode("per_installment")
@@ -117,7 +120,21 @@ export function ExpenseForm({
     const newErrors: Record<string, string> = {}
     if (!merchant.trim()) newErrors.merchant = "Obligatorio"
     if (!personId) newErrors.personId = "Seleccione persona"
-    if (!purchaseDate) newErrors.purchaseDate = "Seleccione fecha"
+
+    // Parsear fecha: yyyy-MM-dd o dd/MM/yyyy
+    let dateToUse: Date | null = purchaseDate ?? null
+    if (!dateToUse && purchaseDateStr.trim()) {
+      const trimmed = purchaseDateStr.trim()
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        dateToUse = new Date(trimmed + "T12:00:00")
+      } else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(trimmed)) {
+        const [d, m, y] = trimmed.split("/").map(Number)
+        dateToUse = new Date(y, m - 1, d)
+      }
+    }
+    if (!dateToUse || isNaN(dateToUse.getTime())) {
+      newErrors.purchaseDate = "Ingresá una fecha válida (DD/MM/AAAA o AAAA-MM-DD)"
+    }
     if (firstInstallment > installments)
       newErrors.firstInstallment =
         "La cuota inicial no puede ser mayor al total"
@@ -136,6 +153,7 @@ export function ExpenseForm({
       return
     }
 
+    const resolvedDate = dateToUse!
     const formData = {
       merchant: merchant.trim(),
       ...(amountMode === "total"
@@ -144,7 +162,7 @@ export function ExpenseForm({
       installments,
       first_installment: firstInstallment,
       person_id: parseInt(personId),
-      purchase_date: format(purchaseDate!, "yyyy-MM-dd"),
+      purchase_date: format(resolvedDate, "yyyy-MM-dd"),
       card: card.trim() || null,
       notes: notes.trim() || null,
     }
@@ -158,7 +176,7 @@ export function ExpenseForm({
         toast.error(result.error)
       } else {
         toast.success(isEditing ? "Gasto actualizado" : "Gasto creado")
-        const purchaseMonth = format(purchaseDate!, "yyyy-MM")
+        const purchaseMonth = format(resolvedDate, "yyyy-MM")
         const firstMonth =
           firstInstallment === 1
             ? purchaseMonth
@@ -289,12 +307,25 @@ export function ExpenseForm({
           {/* Cuotas totales */}
           <div className="flex flex-col gap-1.5">
             <Label>Cuotas totales</Label>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap gap-2">
+              {[3, 6, 9, 12, 18, 24].map((n) => (
+                <Button
+                  key={n}
+                  type="button"
+                  variant={installments === n ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setInstallments(n)}
+                >
+                  {n}
+                </Button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
-                className="size-8"
+                className="size-8 shrink-0"
                 disabled={installments <= 1}
                 onClick={() =>
                   setInstallments((c) => Math.max(1, c - 1))
@@ -309,7 +340,7 @@ export function ExpenseForm({
                 type="button"
                 variant="outline"
                 size="icon"
-                className="size-8"
+                className="size-8 shrink-0"
                 disabled={installments >= 48}
                 onClick={() =>
                   setInstallments((c) => Math.min(48, c + 1))
@@ -402,35 +433,58 @@ export function ExpenseForm({
 
           {/* Fecha de compra */}
           <div className="flex flex-col gap-1.5">
-            <Label>Fecha de compra</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !purchaseDate && "text-muted-foreground"
-                  )}
-                  aria-invalid={!!errors.purchaseDate}
-                >
-                  <CalendarIcon className="mr-2 size-4" />
-                  {purchaseDate
-                    ? format(purchaseDate, "PPP", { locale: es })
-                    : "Seleccionar fecha"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={purchaseDate}
-                  onSelect={(d) => {
-                    setPurchaseDate(d)
-                    setErrors((p) => ({ ...p, purchaseDate: "" }))
-                  }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <Label htmlFor="purchaseDate">
+              Fecha de compra — escribí DD/MM/AAAA o elegí del calendario
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                id="purchaseDate"
+                type="text"
+                placeholder="DD/MM/AAAA o AAAA-MM-DD"
+                value={purchaseDateStr}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setPurchaseDateStr(v)
+                  if (v.trim()) {
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(v.trim())) {
+                      const d = new Date(v.trim() + "T12:00:00")
+                      if (!isNaN(d.getTime())) setPurchaseDate(d)
+                    } else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v.trim())) {
+                      const [d, m, y] = v.trim().split("/").map(Number)
+                      const date = new Date(y, m - 1, d)
+                      if (!isNaN(date.getTime())) setPurchaseDate(date)
+                    }
+                  } else {
+                    setPurchaseDate(undefined)
+                  }
+                  setErrors((p) => ({ ...p, purchaseDate: "" }))
+                }}
+                className="flex-1 font-mono tabular-nums"
+                aria-invalid={!!errors.purchaseDate}
+              />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="icon" className="shrink-0">
+                    <CalendarIcon className="size-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                    mode="single"
+                    selected={purchaseDate}
+                    onSelect={(d) => {
+                      if (d) {
+                        setPurchaseDate(d)
+                        setPurchaseDateStr(format(d, "dd/MM/yyyy"))
+                        setErrors((p) => ({ ...p, purchaseDate: "" }))
+                      }
+                    }}
+                    defaultMonth={purchaseDate}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
             {errors.purchaseDate && (
               <p className="text-xs text-destructive">{errors.purchaseDate}</p>
             )}
