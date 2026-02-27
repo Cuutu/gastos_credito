@@ -143,15 +143,19 @@ export async function updateExpense(id: number, formData: ExpenseInput) {
       WHERE id = ${id}
     `
 
-    // Actualizar expense_persons (borrar y recrear)
-    await sql`DELETE FROM expense_persons WHERE expense_id = ${id}`
-    if (personIds.length > 1) {
-      for (const pid of personIds) {
-        await sql`
-          INSERT INTO expense_persons (expense_id, person_id, share)
-          VALUES (${id}, ${pid}, ${share})
-        `
+    // Actualizar expense_persons (borrar y recrear) — puede no existir si no hay migración 002
+    try {
+      await sql`DELETE FROM expense_persons WHERE expense_id = ${id}`
+      if (personIds.length > 1) {
+        for (const pid of personIds) {
+          await sql`
+            INSERT INTO expense_persons (expense_id, person_id, share)
+            VALUES (${id}, ${pid}, ${share})
+          `
+        }
       }
+    } catch {
+      // Tabla expense_persons no existe
     }
 
     // Regenerate installments
@@ -187,7 +191,14 @@ export async function updateExpense(id: number, formData: ExpenseInput) {
     return { success: true }
   } catch (e) {
     console.error("Error updating expense:", e)
-    return { error: "Error al actualizar el gasto" }
+    const msg = e instanceof Error ? e.message : "Error desconocido"
+    if (msg.includes("person_id") || msg.includes("expense_persons")) {
+      return {
+        error:
+          "Ejecutá el script 002-shared-expenses.sql en Neon para poder editar gastos",
+      }
+    }
+    return { error: `Error al actualizar el gasto: ${msg}` }
   }
 }
 

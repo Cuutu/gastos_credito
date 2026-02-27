@@ -147,19 +147,23 @@ export async function getExpenseById(
   const expense = (rows[0] as ExpenseWithPerson) || null
   if (!expense) return null
 
-  const shared = await sql`
-    SELECT ep.person_id, p.name as person_name
-    FROM expense_persons ep
-    JOIN persons p ON ep.person_id = p.id
-    WHERE ep.expense_id = ${id}
-    ORDER BY ep.person_id
-  `
-  if (shared.length > 0) {
-    return {
-      ...expense,
-      person_ids: shared.map((r) => r.person_id as number),
-      person_names: shared.map((r) => r.person_name as string),
+  try {
+    const shared = await sql`
+      SELECT ep.person_id, p.name as person_name
+      FROM expense_persons ep
+      JOIN persons p ON ep.person_id = p.id
+      WHERE ep.expense_id = ${id}
+      ORDER BY ep.person_id
+    `
+    if (shared.length > 0) {
+      return {
+        ...expense,
+        person_ids: shared.map((r) => r.person_id as number),
+        person_names: shared.map((r) => r.person_name as string),
+      }
     }
+  } catch {
+    // expense_persons puede no existir si no se ejecutó la migración 002
   }
   return {
     ...expense,

@@ -25,6 +25,7 @@ import type {
   ExpenseWithPerson,
 } from "@/lib/types"
 import useSWR from "swr"
+import { toast } from "sonner"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -86,11 +87,17 @@ function DashboardContent() {
   }, [formOpen, handleMutate])
 
   async function handleEdit(expenseId: number) {
-    const res = await fetch(`/api/expenses/${expenseId}`)
-    const json = await res.json()
-    if (json.expense) {
-      setEditExpense(json.expense)
-      setFormOpen(true)
+    try {
+      const res = await fetch(`/api/expenses/${expenseId}`)
+      const json = await res.json()
+      if (json.expense) {
+        setEditExpense(json.expense)
+        setFormOpen(true)
+      } else if (json.error) {
+        toast.error(json.error)
+      }
+    } catch {
+      toast.error("Error al cargar el gasto")
     }
   }
 
@@ -160,6 +167,7 @@ function DashboardContent() {
       </main>
 
       <ExpenseForm
+        key={editExpense?.id ?? "new"}
         open={formOpen}
         onOpenChange={setFormOpen}
         persons={persons}
